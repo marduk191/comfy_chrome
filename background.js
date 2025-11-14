@@ -87,6 +87,9 @@ async function sendImageToComfyUI(imageBlob, settings) {
     if (imageNodeId && workflow[imageNodeId]) {
       workflow[imageNodeId].inputs.image = uploadedFileName;
 
+      // Randomize all seed values in the workflow
+      randomizeSeeds(workflow);
+
       // Generate a random client_id
       const clientId = generateClientId();
 
@@ -128,4 +131,20 @@ function findLoadImageNode(workflow) {
 function generateClientId() {
   return Math.random().toString(36).substring(2, 15) +
          Math.random().toString(36).substring(2, 15);
+}
+
+function generateRandomSeed() {
+  // Generate a random seed between 0 and 2^32 - 1 (max safe integer for most systems)
+  return Math.floor(Math.random() * 4294967295);
+}
+
+function randomizeSeeds(workflow) {
+  // Iterate through all nodes in the workflow
+  for (const [nodeId, node] of Object.entries(workflow)) {
+    if (node.inputs && 'seed' in node.inputs) {
+      // Generate a new random seed
+      node.inputs.seed = generateRandomSeed();
+      console.log(`Randomized seed for node ${nodeId} (${node.class_type}): ${node.inputs.seed}`);
+    }
+  }
 }
