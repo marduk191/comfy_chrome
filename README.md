@@ -6,6 +6,7 @@ A Chrome extension that allows you to right-click on any image in your browser a
 
 - **Right-click context menu**: Send images to ComfyUI with a simple right-click
 - **Automatic workflow integration**: Automatically finds and updates LoadImage nodes in your workflow
+- **Random seed generation**: Automatically randomizes all seed values for unique results every time
 - **Custom workflow support**: Configure any ComfyUI workflow in API format
 - **Easy configuration**: Simple popup interface for basic settings
 - **Advanced options**: Detailed settings page for workflow customization
@@ -69,6 +70,7 @@ The extension includes placeholder icons. For better visuals, you can create cus
   - Upload the image
   - Find the LoadImage node in your workflow (automatically or using your specified node ID)
   - Update the node with the uploaded image filename
+  - Randomize all seed values in the workflow (generates new random seeds for every execution)
   - Queue the workflow for execution
 
 ## How to Get Workflow JSON
@@ -163,5 +165,6 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 - Configurable ComfyUI server URL
 - Workflow JSON support
 - Automatic LoadImage node detection
+- Automatic random seed generation for all nodes
 - Connection testing
 - Browser notifications
