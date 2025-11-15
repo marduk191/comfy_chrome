@@ -2,36 +2,11 @@
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Load saved settings
-  const settings = await chrome.storage.local.get(['comfyuiUrl', 'workflows']);
+  const settings = await chrome.storage.local.get(['servers']);
+  const servers = settings.servers || [];
 
-  if (settings.comfyuiUrl) {
-    document.getElementById('comfyuiUrl').value = settings.comfyuiUrl;
-  }
-
-  // Display workflow count
-  displayWorkflowCount(settings.workflows || []);
-
-  // Save button handler
-  document.getElementById('saveBtn').addEventListener('click', async () => {
-    const comfyuiUrl = document.getElementById('comfyuiUrl').value.trim();
-
-    if (!comfyuiUrl) {
-      showStatus('Please enter a ComfyUI server URL', 'error');
-      return;
-    }
-
-    // Validate URL format
-    try {
-      new URL(comfyuiUrl);
-    } catch (e) {
-      showStatus('Please enter a valid URL', 'error');
-      return;
-    }
-
-    // Save to storage
-    await chrome.storage.local.set({ comfyuiUrl });
-    showStatus('Settings saved successfully!', 'success');
-  });
+  // Display server count
+  displayServerInfo(servers);
 
   // Options link handler
   document.getElementById('optionsLink').addEventListener('click', (e) => {
@@ -40,22 +15,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 });
 
-function displayWorkflowCount(workflows) {
+function displayServerInfo(servers) {
   const countValue = document.getElementById('workflowCountValue');
   const workflowList = document.getElementById('workflowList');
 
-  if (workflows.length === 0) {
-    countValue.textContent = 'No workflows configured';
-    workflowList.innerHTML = '<div style="margin-top: 8px; font-style: italic;">Click "Manage Workflows" to add workflows</div>';
+  if (servers.length === 0) {
+    countValue.textContent = 'No servers configured';
+    workflowList.innerHTML = '<div style="margin-top: 8px; font-style: italic;">Click "Manage Workflows" to add servers</div>';
   } else {
-    countValue.textContent = `${workflows.length} workflow${workflows.length !== 1 ? 's' : ''} configured`;
+    const totalWorkflows = servers.reduce((sum, server) => sum + (server.workflows?.length || 0), 0);
+    countValue.textContent = `${servers.length} server${servers.length !== 1 ? 's' : ''}, ${totalWorkflows} workflow${totalWorkflows !== 1 ? 's' : ''}`;
 
-    // Display workflow names
+    // Display servers and their workflow counts
     workflowList.innerHTML = '';
-    workflows.forEach(workflow => {
+    servers.forEach(server => {
       const item = document.createElement('div');
       item.className = 'workflow-list-item';
-      item.textContent = workflow.name;
+      const workflowCount = server.workflows?.length || 0;
+      item.textContent = `${server.name} (${workflowCount} workflow${workflowCount !== 1 ? 's' : ''})`;
       workflowList.appendChild(item);
     });
   }

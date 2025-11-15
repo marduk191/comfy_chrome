@@ -1,308 +1,422 @@
-// Options page script for ComfyUI Image Sender
+// Options page script for ComfyUI Image Sender - Multi-Server
 
-let editingIndex = -1; // Track which workflow is being edited (-1 = new workflow)
+let currentServerIndex = -1; // -1 = new server
+let currentWorkflowIndex = -1; // -1 = new workflow
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Load saved settings (using local storage for large workflow JSONs)
-  const settings = await chrome.storage.local.get(['comfyuiUrl', 'workflows']);
+  // Load servers from storage
+  await loadAndRenderServers();
 
-  console.log('Loaded settings:', settings);
-  console.log('Workflows count:', settings.workflows ? settings.workflows.length : 0);
-
-  // Check storage quota
-  if (chrome.storage.local.getBytesInUse) {
-    const bytesInUse = await chrome.storage.local.getBytesInUse(['workflows']);
-    console.log('Storage bytes in use for workflows:', bytesInUse, '/ 10485760 (10MB quota)');
-  }
-
-  if (settings.comfyuiUrl) {
-    document.getElementById('comfyuiUrl').value = settings.comfyuiUrl;
-  }
-
-  // Load and display workflows
-  renderWorkflows(settings.workflows || []);
-
-  // Save URL button handler
-  document.getElementById('saveUrlBtn').addEventListener('click', async () => {
-    const comfyuiUrl = document.getElementById('comfyuiUrl').value.trim();
-
-    if (!comfyuiUrl) {
-      showStatus('Please enter a ComfyUI server URL', 'error');
-      return;
-    }
-
-    // Validate URL format
-    try {
-      new URL(comfyuiUrl);
-    } catch (e) {
-      showStatus('Please enter a valid URL', 'error');
-      return;
-    }
-
-    // Save to storage
-    await chrome.storage.local.set({ comfyuiUrl });
-    showStatus('Server URL saved successfully!', 'success');
+  // Add Server button
+  document.getElementById('addServerBtn').addEventListener('click', () => {
+    currentServerIndex = -1;
+    showServerModal('Add Server');
   });
 
-  // Test connection button handler
-  document.getElementById('testBtn').addEventListener('click', async () => {
-    const comfyuiUrl = document.getElementById('comfyuiUrl').value.trim();
+  // Server Modal buttons
+  document.getElementById('saveServerBtn').addEventListener('click', saveServer);
+  document.getElementById('testServerBtn').addEventListener('click', testServer);
+  document.getElementById('cancelServerBtn').addEventListener('click', hideServerModal);
 
-    if (!comfyuiUrl) {
-      showStatus('Please enter a ComfyUI server URL first', 'error');
-      return;
-    }
-
-    try {
-      new URL(comfyuiUrl);
-    } catch (e) {
-      showStatus('Please enter a valid URL', 'error');
-      return;
-    }
-
-    showStatus('Testing connection...', 'success');
-
-    try {
-      const url = comfyuiUrl.replace(/\/$/, '');
-      const response = await fetch(`${url}/system_stats`, {
-        method: 'GET'
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        showStatus(
-          `Connection successful! ComfyUI is running. System: ${JSON.stringify(data.system || 'OK')}`,
-          'success'
-        );
-      } else {
-        showStatus(
-          `Connection failed: ${response.status} ${response.statusText}`,
-          'error'
-        );
-      }
-    } catch (error) {
-      showStatus(
-        `Connection failed: ${error.message}. Make sure ComfyUI is running and accessible.`,
-        'error'
-      );
-    }
-  });
-
-  // Add workflow button handler
-  document.getElementById('addWorkflowBtn').addEventListener('click', async () => {
-    console.log('Add New Workflow clicked');
-    editingIndex = -1;
-
-    // Clear all form fields
-    document.getElementById('formTitle').textContent = 'Add New Workflow';
-    document.getElementById('workflowName').value = '';
-    document.getElementById('workflowData').value = '';
-    document.getElementById('imageNodeId').value = '';
-
-    // Show form
-    document.getElementById('workflowForm').classList.remove('hidden');
-    document.getElementById('workflowName').focus();
-
-    // Log current storage state
-    const currentSettings = await chrome.storage.local.get(['workflows']);
-    console.log('Current workflows in storage when adding new:', currentSettings.workflows);
-  });
-
-  // Cancel workflow button handler
-  document.getElementById('cancelWorkflowBtn').addEventListener('click', () => {
-    document.getElementById('workflowForm').classList.add('hidden');
-    editingIndex = -1;
-  });
-
-  // Save workflow button handler
-  document.getElementById('saveWorkflowBtn').addEventListener('click', async () => {
-    const name = document.getElementById('workflowName').value.trim();
-    const workflowData = document.getElementById('workflowData').value.trim();
-    const imageNodeId = document.getElementById('imageNodeId').value.trim();
-
-    if (!name) {
-      showStatus('Please enter a workflow name', 'error');
-      return;
-    }
-
-    if (!workflowData) {
-      showStatus('Please enter workflow JSON data', 'error');
-      return;
-    }
-
-    // Validate workflow JSON
-    try {
-      JSON.parse(workflowData);
-    } catch (e) {
-      showStatus('Invalid workflow JSON: ' + e.message, 'error');
-      return;
-    }
-
-    // Get current workflows
-    const settings = await chrome.storage.local.get(['workflows']);
-    const workflows = settings.workflows || [];
-    console.log('Current workflows from storage before save:', workflows.length, workflows);
-
-    const workflow = {
-      name: name,
-      workflowData: workflowData,
-      imageNodeId: imageNodeId || null
-    };
-
-    if (editingIndex === -1) {
-      // Adding new workflow
-      console.log('Adding new workflow:', workflow.name);
-      workflows.push(workflow);
-      console.log('Workflows array after push:', workflows.length, 'workflows');
-    } else {
-      // Editing existing workflow
-      console.log('Editing workflow at index:', editingIndex);
-      workflows[editingIndex] = workflow;
-    }
-
-    // Check approximate size
-    const workflowsStr = JSON.stringify(workflows);
-    const approxBytes = new Blob([workflowsStr]).size;
-    console.log('Approximate workflow data size:', approxBytes, 'bytes');
-
-    if (approxBytes > 10485760) { // 10MB limit for local storage
-      showStatus('Warning: Workflow data exceeds 10MB storage limit', 'error');
-      return;
-    }
-
-    // Save to storage
-    try {
-      await chrome.storage.local.set({ workflows });
-      console.log('Workflows saved to storage:', workflows.length, 'workflows');
-
-      // Verify save by reading back
-      const verify = await chrome.storage.local.get(['workflows']);
-      console.log('Verified workflows from storage:', verify.workflows);
-
-      // Hide form and reset
-      document.getElementById('workflowForm').classList.add('hidden');
-      editingIndex = -1;
-
-      // Clear form fields
-      document.getElementById('workflowName').value = '';
-      document.getElementById('workflowData').value = '';
-      document.getElementById('imageNodeId').value = '';
-
-      // Re-render workflows with fresh data from storage
-      renderWorkflows(verify.workflows || []);
-
-      showStatus('Workflow saved successfully!', 'success');
-    } catch (error) {
-      console.error('Error saving workflow:', error);
-      showStatus('Failed to save workflow: ' + error.message, 'error');
-    }
-  });
+  // Workflow Modal buttons
+  document.getElementById('saveWorkflowBtn').addEventListener('click', saveWorkflow);
+  document.getElementById('cancelWorkflowBtn').addEventListener('click', hideWorkflowModal);
 });
 
-function renderWorkflows(workflows) {
-  const workflowList = document.getElementById('workflowList');
-  workflowList.innerHTML = '';
+async function loadAndRenderServers() {
+  const settings = await chrome.storage.local.get(['servers']);
+  const servers = settings.servers || [];
+  console.log('Loaded servers:', servers);
+  renderServers(servers);
+}
 
-  if (workflows.length === 0) {
-    workflowList.innerHTML = '<p style="color: #666; font-style: italic;">No workflows configured. Click "Add New Workflow" to get started.</p>';
+function renderServers(servers) {
+  const serverList = document.getElementById('serverList');
+  serverList.innerHTML = '';
+
+  if (servers.length === 0) {
+    serverList.innerHTML = '<p style="color: #999; font-style: italic; text-align: center; padding: 40px;">No servers configured. Click "Add New Server" to get started.</p>';
     return;
   }
 
-  workflows.forEach((workflow, index) => {
-    const workflowItem = document.createElement('div');
-    workflowItem.className = 'workflow-item';
+  servers.forEach((server, serverIndex) => {
+    const serverCard = document.createElement('div');
+    serverCard.className = 'server-card';
 
-    const workflowInfo = document.createElement('div');
-    workflowInfo.className = 'workflow-item-info';
+    // Server header
+    const serverHeader = document.createElement('div');
+    serverHeader.className = 'server-header';
 
-    const workflowName = document.createElement('div');
-    workflowName.className = 'workflow-item-name';
-    workflowName.textContent = workflow.name;
+    const serverInfo = document.createElement('div');
+    serverInfo.className = 'server-info';
 
-    const workflowDetails = document.createElement('div');
-    workflowDetails.className = 'workflow-item-details';
-    const nodeInfo = workflow.imageNodeId ? `Node ID: ${workflow.imageNodeId}` : 'Auto-detect LoadImage node';
-    workflowDetails.textContent = nodeInfo;
+    const serverName = document.createElement('div');
+    serverName.className = 'server-name';
+    serverName.textContent = server.name;
 
-    workflowInfo.appendChild(workflowName);
-    workflowInfo.appendChild(workflowDetails);
+    const serverUrl = document.createElement('div');
+    serverUrl.className = 'server-url';
+    serverUrl.textContent = server.url;
 
-    const workflowActions = document.createElement('div');
-    workflowActions.className = 'workflow-item-actions';
+    serverInfo.appendChild(serverName);
+    serverInfo.appendChild(serverUrl);
 
-    const editBtn = document.createElement('button');
-    editBtn.textContent = 'Edit';
-    editBtn.className = 'secondary small';
-    editBtn.addEventListener('click', () => editWorkflow(index));
+    const serverActions = document.createElement('div');
+    serverActions.className = 'server-actions';
 
-    const deleteBtn = document.createElement('button');
-    deleteBtn.textContent = 'Delete';
-    deleteBtn.className = 'danger small';
-    deleteBtn.addEventListener('click', () => deleteWorkflow(index));
+    const editServerBtn = document.createElement('button');
+    editServerBtn.textContent = 'Edit';
+    editServerBtn.className = 'secondary small';
+    editServerBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      editServer(serverIndex);
+    });
 
-    workflowActions.appendChild(editBtn);
-    workflowActions.appendChild(deleteBtn);
+    const deleteServerBtn = document.createElement('button');
+    deleteServerBtn.textContent = 'Delete';
+    deleteServerBtn.className = 'danger small';
+    deleteServerBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteServer(serverIndex);
+    });
 
-    workflowItem.appendChild(workflowInfo);
-    workflowItem.appendChild(workflowActions);
+    serverActions.appendChild(editServerBtn);
+    serverActions.appendChild(deleteServerBtn);
 
-    workflowList.appendChild(workflowItem);
+    serverHeader.appendChild(serverInfo);
+    serverHeader.appendChild(serverActions);
+
+    // Server content (workflows)
+    const serverContent = document.createElement('div');
+    serverContent.className = 'server-content expanded'; // Always expanded for now
+    serverContent.id = `server-content-${serverIndex}`;
+
+    const workflowsHeader = document.createElement('h3');
+    workflowsHeader.textContent = 'Workflows';
+
+    const addWorkflowBtn = document.createElement('button');
+    addWorkflowBtn.textContent = '+ Add Workflow';
+    addWorkflowBtn.className = 'small';
+    addWorkflowBtn.style.marginLeft = '10px';
+    addWorkflowBtn.addEventListener('click', () => {
+      currentServerIndex = serverIndex;
+      currentWorkflowIndex = -1;
+      showWorkflowModal('Add Workflow');
+    });
+
+    workflowsHeader.appendChild(addWorkflowBtn);
+    serverContent.appendChild(workflowsHeader);
+
+    // Render workflows
+    if (server.workflows && server.workflows.length > 0) {
+      server.workflows.forEach((workflow, workflowIndex) => {
+        const workflowItem = document.createElement('div');
+        workflowItem.className = 'workflow-item';
+
+        const workflowInfo = document.createElement('div');
+
+        const workflowName = document.createElement('div');
+        workflowName.className = 'workflow-name';
+        workflowName.textContent = workflow.name;
+
+        const workflowDetails = document.createElement('div');
+        workflowDetails.className = 'workflow-details';
+        const nodeInfo = workflow.imageNodeId ? `Node ID: ${workflow.imageNodeId}` : 'Auto-detect LoadImage node';
+        workflowDetails.textContent = nodeInfo;
+
+        workflowInfo.appendChild(workflowName);
+        workflowInfo.appendChild(workflowDetails);
+
+        const workflowActions = document.createElement('div');
+        workflowActions.className = 'workflow-actions';
+
+        const editWorkflowBtn = document.createElement('button');
+        editWorkflowBtn.textContent = 'Edit';
+        editWorkflowBtn.className = 'secondary small';
+        editWorkflowBtn.addEventListener('click', () => {
+          editWorkflow(serverIndex, workflowIndex);
+        });
+
+        const deleteWorkflowBtn = document.createElement('button');
+        deleteWorkflowBtn.textContent = 'Delete';
+        deleteWorkflowBtn.className = 'danger small';
+        deleteWorkflowBtn.addEventListener('click', () => {
+          deleteWorkflow(serverIndex, workflowIndex);
+        });
+
+        workflowActions.appendChild(editWorkflowBtn);
+        workflowActions.appendChild(deleteWorkflowBtn);
+
+        workflowItem.appendChild(workflowInfo);
+        workflowItem.appendChild(workflowActions);
+
+        serverContent.appendChild(workflowItem);
+      });
+    } else {
+      const noWorkflows = document.createElement('div');
+      noWorkflows.className = 'no-workflows';
+      noWorkflows.textContent = 'No workflows configured for this server';
+      serverContent.appendChild(noWorkflows);
+    }
+
+    serverCard.appendChild(serverHeader);
+    serverCard.appendChild(serverContent);
+    serverList.appendChild(serverCard);
   });
 }
 
-async function editWorkflow(index) {
-  editingIndex = index;
+// Server Modal Functions
+function showServerModal(title, server = null) {
+  document.getElementById('serverModalTitle').textContent = title;
+  document.getElementById('serverName').value = server ? server.name : '';
+  document.getElementById('serverUrl').value = server ? server.url : '';
+  document.getElementById('serverModal').classList.add('show');
+}
 
-  // Fetch fresh data from storage
-  const settings = await chrome.storage.local.get(['workflows']);
-  const workflows = settings.workflows || [];
-  const workflow = workflows[index];
+function hideServerModal() {
+  document.getElementById('serverModal').classList.remove('show');
+  currentServerIndex = -1;
+}
+
+async function saveServer() {
+  const name = document.getElementById('serverName').value.trim();
+  const url = document.getElementById('serverUrl').value.trim();
+
+  if (!name) {
+    showStatus('Please enter a server name', 'error');
+    return;
+  }
+
+  if (!url) {
+    showStatus('Please enter a server URL', 'error');
+    return;
+  }
+
+  // Validate URL
+  try {
+    new URL(url);
+  } catch (e) {
+    showStatus('Please enter a valid URL', 'error');
+    return;
+  }
+
+  const settings = await chrome.storage.local.get(['servers']);
+  const servers = settings.servers || [];
+
+  if (currentServerIndex === -1) {
+    // Adding new server
+    servers.push({ name, url, workflows: [] });
+  } else {
+    // Editing existing server
+    servers[currentServerIndex].name = name;
+    servers[currentServerIndex].url = url;
+  }
+
+  try {
+    await chrome.storage.local.set({ servers });
+    console.log('Servers saved:', servers);
+
+    hideServerModal();
+    await loadAndRenderServers();
+    showStatus('Server saved successfully!', 'success');
+  } catch (error) {
+    console.error('Error saving server:', error);
+    showStatus('Failed to save server: ' + error.message, 'error');
+  }
+}
+
+async function testServer() {
+  const url = document.getElementById('serverUrl').value.trim();
+
+  if (!url) {
+    showStatus('Please enter a server URL first', 'error');
+    return;
+  }
+
+  try {
+    new URL(url);
+  } catch (e) {
+    showStatus('Please enter a valid URL', 'error');
+    return;
+  }
+
+  showStatus('Testing connection...', 'success');
+
+  try {
+    const serverUrl = url.replace(/\/$/, '');
+    const response = await fetch(`${serverUrl}/system_stats`, { method: 'GET' });
+
+    if (response.ok) {
+      const data = await response.json();
+      showStatus(`Connection successful! ComfyUI is running.`, 'success');
+    } else {
+      showStatus(`Connection failed: ${response.status} ${response.statusText}`, 'error');
+    }
+  } catch (error) {
+    showStatus(`Connection failed: ${error.message}`, 'error');
+  }
+}
+
+async function editServer(serverIndex) {
+  const settings = await chrome.storage.local.get(['servers']);
+  const servers = settings.servers || [];
+  const server = servers[serverIndex];
+
+  if (!server) {
+    showStatus('Server not found', 'error');
+    return;
+  }
+
+  currentServerIndex = serverIndex;
+  showServerModal('Edit Server', server);
+}
+
+async function deleteServer(serverIndex) {
+  if (!confirm('Are you sure you want to delete this server and all its workflows?')) {
+    return;
+  }
+
+  const settings = await chrome.storage.local.get(['servers']);
+  const servers = settings.servers || [];
+
+  servers.splice(serverIndex, 1);
+
+  try {
+    await chrome.storage.local.set({ servers });
+    console.log('Server deleted, remaining:', servers);
+
+    await loadAndRenderServers();
+    showStatus('Server deleted successfully!', 'success');
+  } catch (error) {
+    console.error('Error deleting server:', error);
+    showStatus('Failed to delete server: ' + error.message, 'error');
+  }
+}
+
+// Workflow Modal Functions
+function showWorkflowModal(title, workflow = null) {
+  document.getElementById('workflowModalTitle').textContent = title;
+  document.getElementById('workflowName').value = workflow ? workflow.name : '';
+  document.getElementById('imageNodeId').value = workflow ? (workflow.imageNodeId || '') : '';
+
+  if (workflow && workflow.workflowData) {
+    try {
+      const formatted = JSON.stringify(JSON.parse(workflow.workflowData), null, 2);
+      document.getElementById('workflowData').value = formatted;
+    } catch (e) {
+      document.getElementById('workflowData').value = workflow.workflowData;
+    }
+  } else {
+    document.getElementById('workflowData').value = '';
+  }
+
+  document.getElementById('workflowModal').classList.add('show');
+}
+
+function hideWorkflowModal() {
+  document.getElementById('workflowModal').classList.remove('show');
+  currentWorkflowIndex = -1;
+}
+
+async function saveWorkflow() {
+  if (currentServerIndex === -1) {
+    showStatus('Error: No server selected', 'error');
+    return;
+  }
+
+  const name = document.getElementById('workflowName').value.trim();
+  const workflowData = document.getElementById('workflowData').value.trim();
+  const imageNodeId = document.getElementById('imageNodeId').value.trim();
+
+  if (!name) {
+    showStatus('Please enter a workflow name', 'error');
+    return;
+  }
+
+  if (!workflowData) {
+    showStatus('Please enter workflow JSON data', 'error');
+    return;
+  }
+
+  // Validate JSON
+  try {
+    JSON.parse(workflowData);
+  } catch (e) {
+    showStatus('Invalid workflow JSON: ' + e.message, 'error');
+    return;
+  }
+
+  const settings = await chrome.storage.local.get(['servers']);
+  const servers = settings.servers || [];
+
+  if (!servers[currentServerIndex]) {
+    showStatus('Server not found', 'error');
+    return;
+  }
+
+  const workflow = { name, workflowData, imageNodeId: imageNodeId || null };
+
+  if (!servers[currentServerIndex].workflows) {
+    servers[currentServerIndex].workflows = [];
+  }
+
+  if (currentWorkflowIndex === -1) {
+    // Adding new workflow
+    servers[currentServerIndex].workflows.push(workflow);
+  } else {
+    // Editing existing workflow
+    servers[currentServerIndex].workflows[currentWorkflowIndex] = workflow;
+  }
+
+  try {
+    await chrome.storage.local.set({ servers });
+    console.log('Workflow saved for server', currentServerIndex);
+
+    hideWorkflowModal();
+    await loadAndRenderServers();
+    showStatus('Workflow saved successfully!', 'success');
+  } catch (error) {
+    console.error('Error saving workflow:', error);
+    showStatus('Failed to save workflow: ' + error.message, 'error');
+  }
+}
+
+async function editWorkflow(serverIndex, workflowIndex) {
+  const settings = await chrome.storage.local.get(['servers']);
+  const servers = settings.servers || [];
+  const workflow = servers[serverIndex]?.workflows?.[workflowIndex];
 
   if (!workflow) {
     showStatus('Workflow not found', 'error');
     return;
   }
 
-  document.getElementById('formTitle').textContent = 'Edit Workflow';
-  document.getElementById('workflowName').value = workflow.name;
-  document.getElementById('imageNodeId').value = workflow.imageNodeId || '';
-
-  // Pretty print the JSON
-  try {
-    const formatted = JSON.stringify(JSON.parse(workflow.workflowData), null, 2);
-    document.getElementById('workflowData').value = formatted;
-  } catch (e) {
-    document.getElementById('workflowData').value = workflow.workflowData;
-  }
-
-  document.getElementById('workflowForm').classList.remove('hidden');
-  document.getElementById('workflowName').focus();
+  currentServerIndex = serverIndex;
+  currentWorkflowIndex = workflowIndex;
+  showWorkflowModal('Edit Workflow', workflow);
 }
 
-async function deleteWorkflow(index) {
+async function deleteWorkflow(serverIndex, workflowIndex) {
   if (!confirm('Are you sure you want to delete this workflow?')) {
     return;
   }
 
-  const settings = await chrome.storage.local.get(['workflows']);
-  const workflows = settings.workflows || [];
+  const settings = await chrome.storage.local.get(['servers']);
+  const servers = settings.servers || [];
 
-  workflows.splice(index, 1);
+  if (servers[serverIndex] && servers[serverIndex].workflows) {
+    servers[serverIndex].workflows.splice(workflowIndex, 1);
 
-  try {
-    await chrome.storage.local.set({ workflows });
-    console.log('Workflow deleted, remaining:', workflows.length);
+    try {
+      await chrome.storage.local.set({ servers });
+      console.log('Workflow deleted');
 
-    // Verify deletion by reading back
-    const verify = await chrome.storage.local.get(['workflows']);
-    console.log('Verified workflows after deletion:', verify.workflows);
-
-    // Re-render with fresh data
-    renderWorkflows(verify.workflows || []);
-    showStatus('Workflow deleted successfully!', 'success');
-  } catch (error) {
-    console.error('Error deleting workflow:', error);
-    showStatus('Failed to delete workflow: ' + error.message, 'error');
+      await loadAndRenderServers();
+      showStatus('Workflow deleted successfully!', 'success');
+    } catch (error) {
+      console.error('Error deleting workflow:', error);
+      showStatus('Failed to delete workflow: ' + error.message, 'error');
+    }
   }
 }
 

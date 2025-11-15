@@ -11,7 +11,7 @@ chrome.runtime.onStartup.addListener(() => {
 
 // Listen for storage changes to update context menus
 chrome.storage.onChanged.addListener((changes, namespace) => {
-  if (namespace === 'local' && changes.workflows) {
+  if (namespace === 'local' && changes.servers) {
     updateContextMenus();
   }
 });
@@ -20,41 +20,59 @@ async function updateContextMenus() {
   // Remove all existing context menus
   await chrome.contextMenus.removeAll();
 
-  // Get workflows from storage
-  const settings = await chrome.storage.local.get(['workflows']);
-  const workflows = settings.workflows || [];
+  // Get servers from storage
+  const settings = await chrome.storage.local.get(['servers']);
+  const servers = settings.servers || [];
 
-  if (workflows.length === 0) {
-    // No workflows configured, create a single menu item
+  if (servers.length === 0) {
+    // No servers configured, create a single menu item
     chrome.contextMenus.create({
-      id: 'sendToComfyUI-noworkflow',
-      title: 'Send to ComfyUI (no workflow)',
+      id: 'sendToComfyUI-noserver',
+      title: 'Send to ComfyUI (no server configured)',
       contexts: ['image']
     });
-  } else if (workflows.length === 1) {
-    // Single workflow, create a direct menu item
-    chrome.contextMenus.create({
-      id: 'workflow-0',
-      title: `Send to ComfyUI: ${workflows[0].name}`,
-      contexts: ['image']
-    });
-  } else {
-    // Multiple workflows, create parent menu with submenus
-    chrome.contextMenus.create({
-      id: 'sendToComfyUI-parent',
-      title: 'Send to ComfyUI',
-      contexts: ['image']
-    });
+    return;
+  }
 
-    workflows.forEach((workflow, index) => {
+  // Create parent menu
+  chrome.contextMenus.create({
+    id: 'sendToComfyUI-parent',
+    title: 'Send to ComfyUI',
+    contexts: ['image']
+  });
+
+  // Create submenu for each server
+  servers.forEach((server, serverIndex) => {
+    const serverMenuId = `server-${serverIndex}`;
+
+    if (server.workflows && server.workflows.length > 0) {
+      // Server has workflows - create server submenu
       chrome.contextMenus.create({
-        id: `workflow-${index}`,
+        id: serverMenuId,
         parentId: 'sendToComfyUI-parent',
-        title: workflow.name,
+        title: server.name,
         contexts: ['image']
       });
-    });
-  }
+
+      // Add workflows under this server
+      server.workflows.forEach((workflow, workflowIndex) => {
+        chrome.contextMenus.create({
+          id: `server-${serverIndex}-workflow-${workflowIndex}`,
+          parentId: serverMenuId,
+          title: workflow.name,
+          contexts: ['image']
+        });
+      });
+    } else {
+      // Server has no workflows - create direct upload option
+      chrome.contextMenus.create({
+        id: `${serverMenuId}-noworkflow`,
+        parentId: 'sendToComfyUI-parent',
+        title: `${server.name} (upload only)`,
+        contexts: ['image']
+      });
+    }
+  });
 }
 
 // Handle context menu clicks
@@ -62,28 +80,54 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const menuItemId = info.menuItemId;
 
   // Get settings from storage
-  const settings = await chrome.storage.local.get(['comfyuiUrl', 'workflows']);
+  const settings = await chrome.storage.local.get(['servers']);
+  const servers = settings.servers || [];
 
-  if (!settings.comfyuiUrl) {
+  if (servers.length === 0) {
     chrome.notifications.create({
       type: 'basic',
       iconUrl: 'icons/icon48.png',
       title: 'ComfyUI Not Configured',
-      message: 'Please configure your ComfyUI server URL in the extension settings.'
+      message: 'Please configure at least one ComfyUI server in the extension settings.'
     });
     return;
   }
 
-  const workflows = settings.workflows || [];
+  let selectedServer = null;
   let selectedWorkflow = null;
 
-  // Handle "no workflow" case
-  if (menuItemId === 'sendToComfyUI-noworkflow') {
+  // Handle "no server" case
+  if (menuItemId === 'sendToComfyUI-noserver') {
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon48.png',
+      title: 'No Server Configured',
+      message: 'Please add a ComfyUI server in the extension settings.'
+    });
+    return;
+  }
+
+  // Parse menu item ID: server-X-workflow-Y or server-X-noworkflow
+  if (menuItemId.includes('-workflow-')) {
+    // Format: server-X-workflow-Y
+    const parts = menuItemId.split('-');
+    const serverIndex = parseInt(parts[1]);
+    const workflowIndex = parseInt(parts[3]);
+
+    selectedServer = servers[serverIndex];
+    if (selectedServer && selectedServer.workflows) {
+      selectedWorkflow = selectedServer.workflows[workflowIndex];
+    }
+  } else if (menuItemId.includes('-noworkflow')) {
+    // Format: server-X-noworkflow
+    const serverIndex = parseInt(menuItemId.split('-')[1]);
+    selectedServer = servers[serverIndex];
     selectedWorkflow = { name: 'Upload only', workflowData: null, imageNodeId: null };
-  } else if (menuItemId.startsWith('workflow-')) {
-    // Extract workflow index from menu item ID
-    const workflowIndex = parseInt(menuItemId.split('-')[1]);
-    selectedWorkflow = workflows[workflowIndex];
+  }
+
+  if (!selectedServer) {
+    console.error('No server selected');
+    return;
   }
 
   if (!selectedWorkflow) {
@@ -99,13 +143,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     const blob = await response.blob();
 
     // Send to ComfyUI
-    await sendImageToComfyUI(blob, settings.comfyuiUrl, selectedWorkflow);
+    await sendImageToComfyUI(blob, selectedServer.url, selectedWorkflow);
 
     chrome.notifications.create({
       type: 'basic',
       iconUrl: 'icons/icon48.png',
       title: 'Success',
-      message: `Image sent to ComfyUI: ${selectedWorkflow.name}`
+      message: `Image sent to ${selectedServer.name}: ${selectedWorkflow.name}`
     });
   } catch (error) {
     console.error('Error sending image to ComfyUI:', error);
@@ -113,7 +157,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       type: 'basic',
       iconUrl: 'icons/icon48.png',
       title: 'Error',
-      message: `Failed to send image: ${error.message}`
+      message: `Failed to send image to ${selectedServer.name}: ${error.message}`
     });
   }
 });
