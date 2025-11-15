@@ -89,14 +89,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Add workflow button handler
-  document.getElementById('addWorkflowBtn').addEventListener('click', () => {
+  document.getElementById('addWorkflowBtn').addEventListener('click', async () => {
+    console.log('Add New Workflow clicked');
     editingIndex = -1;
+
+    // Clear all form fields
     document.getElementById('formTitle').textContent = 'Add New Workflow';
     document.getElementById('workflowName').value = '';
     document.getElementById('workflowData').value = '';
     document.getElementById('imageNodeId').value = '';
+
+    // Show form
     document.getElementById('workflowForm').classList.remove('hidden');
     document.getElementById('workflowName').focus();
+
+    // Log current storage state
+    const currentSettings = await chrome.storage.sync.get(['workflows']);
+    console.log('Current workflows in storage when adding new:', currentSettings.workflows);
   });
 
   // Cancel workflow button handler
@@ -132,6 +141,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Get current workflows
     const settings = await chrome.storage.sync.get(['workflows']);
     const workflows = settings.workflows || [];
+    console.log('Current workflows from storage before save:', workflows.length, workflows);
 
     const workflow = {
       name: name,
@@ -141,9 +151,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (editingIndex === -1) {
       // Adding new workflow
+      console.log('Adding new workflow:', workflow.name);
       workflows.push(workflow);
+      console.log('Workflows array after push:', workflows.length, 'workflows');
     } else {
       // Editing existing workflow
+      console.log('Editing workflow at index:', editingIndex);
       workflows[editingIndex] = workflow;
     }
 
@@ -170,8 +183,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('workflowForm').classList.add('hidden');
       editingIndex = -1;
 
-      // Re-render workflows
-      renderWorkflows(workflows);
+      // Clear form fields
+      document.getElementById('workflowName').value = '';
+      document.getElementById('workflowData').value = '';
+      document.getElementById('imageNodeId').value = '';
+
+      // Re-render workflows with fresh data from storage
+      renderWorkflows(verify.workflows || []);
 
       showStatus('Workflow saved successfully!', 'success');
     } catch (error) {
@@ -271,10 +289,21 @@ async function deleteWorkflow(index) {
 
   workflows.splice(index, 1);
 
-  await chrome.storage.sync.set({ workflows });
+  try {
+    await chrome.storage.sync.set({ workflows });
+    console.log('Workflow deleted, remaining:', workflows.length);
 
-  renderWorkflows(workflows);
-  showStatus('Workflow deleted successfully!', 'success');
+    // Verify deletion by reading back
+    const verify = await chrome.storage.sync.get(['workflows']);
+    console.log('Verified workflows after deletion:', verify.workflows);
+
+    // Re-render with fresh data
+    renderWorkflows(verify.workflows || []);
+    showStatus('Workflow deleted successfully!', 'success');
+  } catch (error) {
+    console.error('Error deleting workflow:', error);
+    showStatus('Failed to delete workflow: ' + error.message, 'error');
+  }
 }
 
 function showStatus(message, type) {
