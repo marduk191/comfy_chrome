@@ -143,7 +143,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     const blob = await response.blob();
 
     // Send to ComfyUI
-    const promptId = await sendImageToComfyUI(blob, selectedServer.url, selectedWorkflow);
+    await sendImageToComfyUI(blob, selectedServer.url, selectedWorkflow);
 
     chrome.notifications.create({
       type: 'basic',
@@ -151,11 +151,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       title: 'Success',
       message: `Image sent to ${selectedServer.name}: ${selectedWorkflow.name}`
     });
-
-    // If showResults is enabled, poll for completion and display results
-    if (selectedWorkflow.showResults && promptId) {
-      pollForResults(selectedServer.url, promptId, selectedWorkflow.name);
-    }
   } catch (error) {
     console.error('Error sending image to ComfyUI:', error);
     chrome.notifications.create({
@@ -222,16 +217,10 @@ async function sendImageToComfyUI(imageBlob, comfyuiUrl, workflow) {
 
       const queueResult = await queueResponse.json();
       console.log('Workflow queued:', queueResult);
-
-      // Return the prompt_id for polling
-      return queueResult.prompt_id;
     } else {
       console.warn('No LoadImage node found in workflow, image uploaded but workflow not queued');
-      return null;
     }
   }
-
-  return null;
 }
 
 function findLoadImageNode(workflow) {
@@ -263,187 +252,4 @@ function randomizeSeeds(workflow) {
       console.log(`Randomized seed for node ${nodeId} (${node.class_type}): ${node.inputs.seed}`);
     }
   }
-}
-
-async function pollForResults(serverUrl, promptId, workflowName) {
-  const url = serverUrl.replace(/\/$/, '');
-  const maxAttempts = 120; // Poll for up to 2 minutes (120 * 1 second)
-  let attempts = 0;
-
-  console.log(`Starting to poll for results: ${promptId}`);
-
-  const poll = async () => {
-    try {
-      attempts++;
-
-      const response = await fetch(`${url}/history/${promptId}`);
-
-      if (!response.ok) {
-        throw new Error(`History fetch failed: ${response.statusText}`);
-      }
-
-      const history = await response.json();
-
-      // Check if our prompt_id is in the history
-      if (history[promptId]) {
-        const promptData = history[promptId];
-
-        // Check if execution is complete
-        if (promptData.status && promptData.status.completed === true) {
-          console.log('Workflow completed, extracting outputs');
-          await displayResults(url, promptData, workflowName);
-          return;
-        }
-
-        // Alternative: check if outputs exist
-        if (promptData.outputs) {
-          console.log('Workflow completed, extracting outputs');
-          await displayResults(url, promptData, workflowName);
-          return;
-        }
-      }
-
-      // Continue polling if not done and within attempt limit
-      if (attempts < maxAttempts) {
-        setTimeout(poll, 1000); // Poll every 1 second
-      } else {
-        console.warn('Polling timeout - workflow took too long');
-        chrome.notifications.create({
-          type: 'basic',
-          iconUrl: 'icons/icon48.png',
-          title: 'Timeout',
-          message: `Workflow "${workflowName}" is taking longer than expected`
-        });
-      }
-    } catch (error) {
-      console.error('Error polling for results:', error);
-
-      if (attempts < maxAttempts) {
-        setTimeout(poll, 1000); // Retry on error
-      }
-    }
-  };
-
-  // Start polling
-  poll();
-}
-
-async function displayResults(serverUrl, promptData, workflowName) {
-  const url = serverUrl.replace(/\/$/, '');
-  const outputImages = [];
-
-  // Extract all output images from the result
-  if (promptData.outputs) {
-    for (const [nodeId, nodeOutput] of Object.entries(promptData.outputs)) {
-      if (nodeOutput.images) {
-        for (const image of nodeOutput.images) {
-          outputImages.push({
-            filename: image.filename,
-            subfolder: image.subfolder || '',
-            type: image.type || 'output'
-          });
-        }
-      }
-    }
-  }
-
-  if (outputImages.length === 0) {
-    console.warn('No output images found');
-    chrome.notifications.create({
-      type: 'basic',
-      iconUrl: 'icons/icon48.png',
-      title: 'No Results',
-      message: `Workflow "${workflowName}" completed but produced no images`
-    });
-    return;
-  }
-
-  console.log(`Found ${outputImages.length} output images`);
-
-  // Create result page HTML
-  const imageUrls = outputImages.map(img => {
-    const params = new URLSearchParams({
-      filename: img.filename,
-      subfolder: img.subfolder,
-      type: img.type
-    });
-    return `${url}/view?${params.toString()}`;
-  });
-
-  // Create a data URL with the HTML
-  const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>ComfyUI Results - ${workflowName}</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 20px;
-      background: #1a1a1a;
-      color: #fff;
-    }
-    h1 {
-      text-align: center;
-      color: #4CAF50;
-    }
-    .container {
-      max-width: 1400px;
-      margin: 0 auto;
-    }
-    .images {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-      gap: 20px;
-      margin-top: 30px;
-    }
-    .image-card {
-      background: #2a2a2a;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-    }
-    .image-card img {
-      width: 100%;
-      display: block;
-    }
-    .image-info {
-      padding: 15px;
-      font-size: 14px;
-      color: #aaa;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>Results: ${workflowName}</h1>
-    <div class="images">
-      ${imageUrls.map((imageUrl, i) => `
-        <div class="image-card">
-          <img src="${imageUrl}" alt="Result ${i + 1}">
-          <div class="image-info">Image ${i + 1} of ${imageUrls.length}</div>
-        </div>
-      `).join('')}
-    </div>
-  </div>
-</body>
-</html>`;
-
-  // Open in new tab
-  const blob = new Blob([html], { type: 'text/html' });
-  const blobUrl = URL.createObjectURL(blob);
-
-  chrome.tabs.create({ url: blobUrl }, (tab) => {
-    // Clean up blob URL after a delay
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-  });
-
-  chrome.notifications.create({
-    type: 'basic',
-    iconUrl: 'icons/icon48.png',
-    title: 'Results Ready',
-    message: `Workflow "${workflowName}" completed with ${outputImages.length} image(s)`
-  });
 }
