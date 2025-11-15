@@ -6,6 +6,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load saved settings
   const settings = await chrome.storage.sync.get(['comfyuiUrl', 'workflows']);
 
+  console.log('Loaded settings:', settings);
+  console.log('Workflows count:', settings.workflows ? settings.workflows.length : 0);
+
+  // Check storage quota
+  if (chrome.storage.sync.getBytesInUse) {
+    const bytesInUse = await chrome.storage.sync.getBytesInUse(['workflows']);
+    console.log('Storage bytes in use for workflows:', bytesInUse, '/ 102400 (100KB quota)');
+  }
+
   if (settings.comfyuiUrl) {
     document.getElementById('comfyuiUrl').value = settings.comfyuiUrl;
   }
@@ -80,14 +89,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Add workflow button handler
-  document.getElementById('addWorkflowBtn').addEventListener('click', () => {
+  document.getElementById('addWorkflowBtn').addEventListener('click', async () => {
+    console.log('Add New Workflow clicked');
     editingIndex = -1;
+
+    // Clear all form fields
     document.getElementById('formTitle').textContent = 'Add New Workflow';
     document.getElementById('workflowName').value = '';
     document.getElementById('workflowData').value = '';
     document.getElementById('imageNodeId').value = '';
+
+    // Show form
     document.getElementById('workflowForm').classList.remove('hidden');
     document.getElementById('workflowName').focus();
+
+    // Log current storage state
+    const currentSettings = await chrome.storage.sync.get(['workflows']);
+    console.log('Current workflows in storage when adding new:', currentSettings.workflows);
   });
 
   // Cancel workflow button handler
@@ -123,6 +141,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Get current workflows
     const settings = await chrome.storage.sync.get(['workflows']);
     const workflows = settings.workflows || [];
+    console.log('Current workflows from storage before save:', workflows.length, workflows);
 
     const workflow = {
       name: name,
@@ -132,23 +151,51 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (editingIndex === -1) {
       // Adding new workflow
+      console.log('Adding new workflow:', workflow.name);
       workflows.push(workflow);
+      console.log('Workflows array after push:', workflows.length, 'workflows');
     } else {
       // Editing existing workflow
+      console.log('Editing workflow at index:', editingIndex);
       workflows[editingIndex] = workflow;
     }
 
+    // Check approximate size
+    const workflowsStr = JSON.stringify(workflows);
+    const approxBytes = new Blob([workflowsStr]).size;
+    console.log('Approximate workflow data size:', approxBytes, 'bytes');
+
+    if (approxBytes > 102400) {
+      showStatus('Warning: Workflow data is very large (>100KB). Consider using chrome.storage.local instead.', 'error');
+      return;
+    }
+
     // Save to storage
-    await chrome.storage.sync.set({ workflows });
+    try {
+      await chrome.storage.sync.set({ workflows });
+      console.log('Workflows saved to storage:', workflows.length, 'workflows');
 
-    // Hide form and reset
-    document.getElementById('workflowForm').classList.add('hidden');
-    editingIndex = -1;
+      // Verify save by reading back
+      const verify = await chrome.storage.sync.get(['workflows']);
+      console.log('Verified workflows from storage:', verify.workflows);
 
-    // Re-render workflows
-    renderWorkflows(workflows);
+      // Hide form and reset
+      document.getElementById('workflowForm').classList.add('hidden');
+      editingIndex = -1;
 
-    showStatus('Workflow saved successfully!', 'success');
+      // Clear form fields
+      document.getElementById('workflowName').value = '';
+      document.getElementById('workflowData').value = '';
+      document.getElementById('imageNodeId').value = '';
+
+      // Re-render workflows with fresh data from storage
+      renderWorkflows(verify.workflows || []);
+
+      showStatus('Workflow saved successfully!', 'success');
+    } catch (error) {
+      console.error('Error saving workflow:', error);
+      showStatus('Failed to save workflow: ' + error.message, 'error');
+    }
   });
 });
 
@@ -186,7 +233,7 @@ function renderWorkflows(workflows) {
     const editBtn = document.createElement('button');
     editBtn.textContent = 'Edit';
     editBtn.className = 'secondary small';
-    editBtn.addEventListener('click', () => editWorkflow(index, workflows));
+    editBtn.addEventListener('click', () => editWorkflow(index));
 
     const deleteBtn = document.createElement('button');
     deleteBtn.textContent = 'Delete';
@@ -203,9 +250,18 @@ function renderWorkflows(workflows) {
   });
 }
 
-function editWorkflow(index, workflows) {
+async function editWorkflow(index) {
   editingIndex = index;
+
+  // Fetch fresh data from storage
+  const settings = await chrome.storage.sync.get(['workflows']);
+  const workflows = settings.workflows || [];
   const workflow = workflows[index];
+
+  if (!workflow) {
+    showStatus('Workflow not found', 'error');
+    return;
+  }
 
   document.getElementById('formTitle').textContent = 'Edit Workflow';
   document.getElementById('workflowName').value = workflow.name;
@@ -233,10 +289,21 @@ async function deleteWorkflow(index) {
 
   workflows.splice(index, 1);
 
-  await chrome.storage.sync.set({ workflows });
+  try {
+    await chrome.storage.sync.set({ workflows });
+    console.log('Workflow deleted, remaining:', workflows.length);
 
-  renderWorkflows(workflows);
-  showStatus('Workflow deleted successfully!', 'success');
+    // Verify deletion by reading back
+    const verify = await chrome.storage.sync.get(['workflows']);
+    console.log('Verified workflows after deletion:', verify.workflows);
+
+    // Re-render with fresh data
+    renderWorkflows(verify.workflows || []);
+    showStatus('Workflow deleted successfully!', 'success');
+  } catch (error) {
+    console.error('Error deleting workflow:', error);
+    showStatus('Failed to delete workflow: ' + error.message, 'error');
+  }
 }
 
 function showStatus(message, type) {
