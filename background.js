@@ -11,7 +11,7 @@ chrome.runtime.onStartup.addListener(() => {
 
 // Listen for storage changes to update context menus
 chrome.storage.onChanged.addListener((changes, namespace) => {
-  if (namespace === 'sync' && changes.workflows) {
+  if (namespace === 'local' && changes.workflows) {
     updateContextMenus();
   }
 });
@@ -21,7 +21,7 @@ async function updateContextMenus() {
   await chrome.contextMenus.removeAll();
 
   // Get workflows from storage
-  const settings = await chrome.storage.sync.get(['workflows']);
+  const settings = await chrome.storage.local.get(['workflows']);
   const workflows = settings.workflows || [];
 
   if (workflows.length === 0) {
@@ -62,7 +62,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const menuItemId = info.menuItemId;
 
   // Get settings from storage
-  const settings = await chrome.storage.sync.get(['comfyuiUrl', 'workflows']);
+  const settings = await chrome.storage.local.get(['comfyuiUrl', 'workflows']);
 
   if (!settings.comfyuiUrl) {
     chrome.notifications.create({

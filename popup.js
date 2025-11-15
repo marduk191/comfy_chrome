@@ -2,7 +2,7 @@
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Load saved settings
-  const settings = await chrome.storage.sync.get(['comfyuiUrl', 'workflows']);
+  const settings = await chrome.storage.local.get(['comfyuiUrl', 'workflows']);
 
   if (settings.comfyuiUrl) {
     document.getElementById('comfyuiUrl').value = settings.comfyuiUrl;
@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Save to storage
-    await chrome.storage.sync.set({ comfyuiUrl });
+    await chrome.storage.local.set({ comfyuiUrl });
     showStatus('Settings saved successfully!', 'success');
   });
 

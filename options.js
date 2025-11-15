@@ -3,16 +3,16 @@
 let editingIndex = -1; // Track which workflow is being edited (-1 = new workflow)
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Load saved settings
-  const settings = await chrome.storage.sync.get(['comfyuiUrl', 'workflows']);
+  // Load saved settings (using local storage for large workflow JSONs)
+  const settings = await chrome.storage.local.get(['comfyuiUrl', 'workflows']);
 
   console.log('Loaded settings:', settings);
   console.log('Workflows count:', settings.workflows ? settings.workflows.length : 0);
 
   // Check storage quota
-  if (chrome.storage.sync.getBytesInUse) {
-    const bytesInUse = await chrome.storage.sync.getBytesInUse(['workflows']);
-    console.log('Storage bytes in use for workflows:', bytesInUse, '/ 102400 (100KB quota)');
+  if (chrome.storage.local.getBytesInUse) {
+    const bytesInUse = await chrome.storage.local.getBytesInUse(['workflows']);
+    console.log('Storage bytes in use for workflows:', bytesInUse, '/ 10485760 (10MB quota)');
   }
 
   if (settings.comfyuiUrl) {
@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Save to storage
-    await chrome.storage.sync.set({ comfyuiUrl });
+    await chrome.storage.local.set({ comfyuiUrl });
     showStatus('Server URL saved successfully!', 'success');
   });
 
@@ -104,7 +104,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('workflowName').focus();
 
     // Log current storage state
-    const currentSettings = await chrome.storage.sync.get(['workflows']);
+    const currentSettings = await chrome.storage.local.get(['workflows']);
     console.log('Current workflows in storage when adding new:', currentSettings.workflows);
   });
 
@@ -139,7 +139,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Get current workflows
-    const settings = await chrome.storage.sync.get(['workflows']);
+    const settings = await chrome.storage.local.get(['workflows']);
     const workflows = settings.workflows || [];
     console.log('Current workflows from storage before save:', workflows.length, workflows);
 
@@ -165,18 +165,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     const approxBytes = new Blob([workflowsStr]).size;
     console.log('Approximate workflow data size:', approxBytes, 'bytes');
 
-    if (approxBytes > 102400) {
-      showStatus('Warning: Workflow data is very large (>100KB). Consider using chrome.storage.local instead.', 'error');
+    if (approxBytes > 10485760) { // 10MB limit for local storage
+      showStatus('Warning: Workflow data exceeds 10MB storage limit', 'error');
       return;
     }
 
     // Save to storage
     try {
-      await chrome.storage.sync.set({ workflows });
+      await chrome.storage.local.set({ workflows });
       console.log('Workflows saved to storage:', workflows.length, 'workflows');
 
       // Verify save by reading back
-      const verify = await chrome.storage.sync.get(['workflows']);
+      const verify = await chrome.storage.local.get(['workflows']);
       console.log('Verified workflows from storage:', verify.workflows);
 
       // Hide form and reset
@@ -254,7 +254,7 @@ async function editWorkflow(index) {
   editingIndex = index;
 
   // Fetch fresh data from storage
-  const settings = await chrome.storage.sync.get(['workflows']);
+  const settings = await chrome.storage.local.get(['workflows']);
   const workflows = settings.workflows || [];
   const workflow = workflows[index];
 
@@ -284,17 +284,17 @@ async function deleteWorkflow(index) {
     return;
   }
 
-  const settings = await chrome.storage.sync.get(['workflows']);
+  const settings = await chrome.storage.local.get(['workflows']);
   const workflows = settings.workflows || [];
 
   workflows.splice(index, 1);
 
   try {
-    await chrome.storage.sync.set({ workflows });
+    await chrome.storage.local.set({ workflows });
     console.log('Workflow deleted, remaining:', workflows.length);
 
     // Verify deletion by reading back
-    const verify = await chrome.storage.sync.get(['workflows']);
+    const verify = await chrome.storage.local.get(['workflows']);
     console.log('Verified workflows after deletion:', verify.workflows);
 
     // Re-render with fresh data
