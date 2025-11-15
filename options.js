@@ -122,7 +122,8 @@ function renderServers(servers) {
         const workflowDetails = document.createElement('div');
         workflowDetails.className = 'workflow-details';
         const nodeInfo = workflow.imageNodeId ? `Node ID: ${workflow.imageNodeId}` : 'Auto-detect LoadImage node';
-        workflowDetails.textContent = nodeInfo;
+        const resultsInfo = workflow.showResults ? ' • Show results' : '';
+        workflowDetails.textContent = nodeInfo + resultsInfo;
 
         workflowInfo.appendChild(workflowName);
         workflowInfo.appendChild(workflowDetails);
@@ -298,6 +299,7 @@ function showWorkflowModal(title, workflow = null) {
   document.getElementById('workflowModalTitle').textContent = title;
   document.getElementById('workflowName').value = workflow ? workflow.name : '';
   document.getElementById('imageNodeId').value = workflow ? (workflow.imageNodeId || '') : '';
+  document.getElementById('showResults').checked = workflow ? (workflow.showResults || false) : false;
 
   if (workflow && workflow.workflowData) {
     try {
@@ -327,6 +329,7 @@ async function saveWorkflow() {
   const name = document.getElementById('workflowName').value.trim();
   const workflowData = document.getElementById('workflowData').value.trim();
   const imageNodeId = document.getElementById('imageNodeId').value.trim();
+  const showResults = document.getElementById('showResults').checked;
 
   if (!name) {
     showStatus('Please enter a workflow name', 'error');
@@ -354,7 +357,12 @@ async function saveWorkflow() {
     return;
   }
 
-  const workflow = { name, workflowData, imageNodeId: imageNodeId || null };
+  const workflow = {
+    name,
+    workflowData,
+    imageNodeId: imageNodeId || null,
+    showResults: showResults
+  };
 
   if (!servers[currentServerIndex].workflows) {
     servers[currentServerIndex].workflows = [];

@@ -370,6 +370,13 @@
         <input type="text" id="imageNodeId" placeholder="e.g., 3">
         <div class="help-text">Leave empty for auto-detection</div>
       </div>
+      <div class="section">
+        <label style="display: flex; align-items: center; cursor: pointer;">
+          <input type="checkbox" id="showResults" style="margin-right: 8px; width: auto;">
+          <span>Show results in new window after completion</span>
+        </label>
+        <div class="help-text">When enabled, the extension will wait for the workflow to complete and display the output images in a new browser window</div>
+      </div>
       <div class="button-group">
         <button id="saveWorkflowBtn">Save Workflow</button>
         <button id="cancelWorkflowBtn" class="secondary">Cancel</button>
