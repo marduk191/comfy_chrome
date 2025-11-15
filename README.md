@@ -5,11 +5,12 @@ A Chrome extension that allows you to right-click on any image in your browser a
 ## Features
 
 - **Right-click context menu**: Send images to ComfyUI with a simple right-click
+- **Multiple workflow support**: Configure and choose from multiple workflows via context menu
 - **Automatic workflow integration**: Automatically finds and updates LoadImage nodes in your workflow
 - **Random seed generation**: Automatically randomizes all seed values for unique results every time
 - **Custom workflow support**: Configure any ComfyUI workflow in API format
 - **Easy configuration**: Simple popup interface for basic settings
-- **Advanced options**: Detailed settings page for workflow customization
+- **Advanced options**: Detailed settings page for workflow management
 - **Connection testing**: Built-in tool to verify ComfyUI connectivity
 - **Notifications**: Visual feedback on successful uploads or errors
 
@@ -36,31 +37,47 @@ The extension includes placeholder icons. For better visuals, you can create cus
 1. Click the extension icon in your Chrome toolbar
 2. Enter your ComfyUI server URL (e.g., `http://127.0.0.1:8188`)
 3. Click "Save Settings"
+4. Click "Manage Workflows" to configure your workflows
 
-### Advanced Workflow Configuration
+### Managing Workflows
 
-1. Click the extension icon and then "Advanced Settings" (or right-click the extension icon and select "Options")
-2. Enter your ComfyUI server URL
-3. In ComfyUI:
-   - Load or create the workflow you want to use
-   - Click **"Save (API Format)"** to export your workflow as JSON
-   - Copy the entire JSON content
-4. Paste the workflow JSON into the "Workflow JSON (API Format)" field
-5. (Optional) If you have multiple LoadImage nodes, specify which one to use in the "Image Node ID" field
-6. Click "Save Settings"
-7. Use the "Test Connection" button to verify connectivity to your ComfyUI server
+1. Click the extension icon and then "Manage Workflows" (or right-click the extension icon and select "Options")
+2. Enter your ComfyUI server URL and click "Save URL"
+3. Click "+ Add New Workflow" to create a new workflow
+4. Fill in the workflow details:
+   - **Workflow Name**: Give it a descriptive name (e.g., "Portrait Enhancement", "Background Removal")
+   - **Workflow JSON**: In ComfyUI, click "Save (API Format)" and paste the JSON content here
+   - **Image Node ID** (Optional): Specify which LoadImage node to use if you have multiple
+5. Click "Save Workflow"
+6. Repeat to add more workflows
+7. Each workflow can be edited or deleted using the buttons next to it
+8. Use the "Test Connection" button to verify connectivity to your ComfyUI server
 
 ## Usage
 
 ### Sending an Image to ComfyUI
 
+**With No Workflows Configured:**
 1. Navigate to any webpage with images
 2. Right-click on an image
-3. Select "Send to ComfyUI" from the context menu
-4. The extension will:
+3. Select "Send to ComfyUI (no workflow)" from the context menu
+4. The image will be uploaded to ComfyUI (but no workflow will be queued)
+
+**With One Workflow Configured:**
+1. Navigate to any webpage with images
+2. Right-click on an image
+3. Select "Send to ComfyUI: [Workflow Name]" from the context menu
+4. The workflow will execute with your image
+
+**With Multiple Workflows Configured:**
+1. Navigate to any webpage with images
+2. Right-click on an image
+3. Hover over "Send to ComfyUI" to see the submenu
+4. Select the workflow you want to use from the list
+5. The extension will:
    - Download the image
    - Upload it to your ComfyUI server
-   - Queue your configured workflow with the image
+   - Queue the selected workflow with the image
    - Show a notification when complete
 
 ### Workflow Behavior
@@ -158,6 +175,13 @@ MIT License - Feel free to modify and distribute
 Contributions are welcome! Please feel free to submit issues or pull requests.
 
 ## Changelog
+
+### Version 1.1.0
+- Added support for multiple workflows
+- Context menu now shows submenu with all configured workflows
+- New workflow management UI with add/edit/delete functionality
+- Workflows are automatically updated in context menu when changed
+- Popup shows list of configured workflows
 
 ### Version 1.0.0
 - Initial release

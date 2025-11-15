@@ -1,71 +1,132 @@
 // Background service worker for ComfyUI Image Sender
 
-// Create context menu on installation
+// Initialize context menus on installation or startup
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: 'sendToComfyUI',
-    title: 'Send to ComfyUI',
-    contexts: ['image']
-  });
+  updateContextMenus();
 });
 
-// Handle context menu clicks
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === 'sendToComfyUI') {
-    const imageUrl = info.srcUrl;
+chrome.runtime.onStartup.addListener(() => {
+  updateContextMenus();
+});
 
-    // Get settings from storage
-    const settings = await chrome.storage.sync.get([
-      'comfyuiUrl',
-      'workflowData',
-      'imageNodeId'
-    ]);
-
-    if (!settings.comfyuiUrl) {
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/icon48.png',
-        title: 'ComfyUI Not Configured',
-        message: 'Please configure your ComfyUI server URL in the extension settings.'
-      });
-      return;
-    }
-
-    try {
-      // Fetch the image
-      const response = await fetch(imageUrl);
-      const blob = await response.blob();
-
-      // Send to ComfyUI
-      await sendImageToComfyUI(blob, settings);
-
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/icon48.png',
-        title: 'Success',
-        message: 'Image sent to ComfyUI successfully!'
-      });
-    } catch (error) {
-      console.error('Error sending image to ComfyUI:', error);
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/icon48.png',
-        title: 'Error',
-        message: `Failed to send image: ${error.message}`
-      });
-    }
+// Listen for storage changes to update context menus
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === 'sync' && changes.workflows) {
+    updateContextMenus();
   }
 });
 
-async function sendImageToComfyUI(imageBlob, settings) {
-  const comfyuiUrl = settings.comfyuiUrl.replace(/\/$/, ''); // Remove trailing slash
+async function updateContextMenus() {
+  // Remove all existing context menus
+  await chrome.contextMenus.removeAll();
+
+  // Get workflows from storage
+  const settings = await chrome.storage.sync.get(['workflows']);
+  const workflows = settings.workflows || [];
+
+  if (workflows.length === 0) {
+    // No workflows configured, create a single menu item
+    chrome.contextMenus.create({
+      id: 'sendToComfyUI-noworkflow',
+      title: 'Send to ComfyUI (no workflow)',
+      contexts: ['image']
+    });
+  } else if (workflows.length === 1) {
+    // Single workflow, create a direct menu item
+    chrome.contextMenus.create({
+      id: 'workflow-0',
+      title: `Send to ComfyUI: ${workflows[0].name}`,
+      contexts: ['image']
+    });
+  } else {
+    // Multiple workflows, create parent menu with submenus
+    chrome.contextMenus.create({
+      id: 'sendToComfyUI-parent',
+      title: 'Send to ComfyUI',
+      contexts: ['image']
+    });
+
+    workflows.forEach((workflow, index) => {
+      chrome.contextMenus.create({
+        id: `workflow-${index}`,
+        parentId: 'sendToComfyUI-parent',
+        title: workflow.name,
+        contexts: ['image']
+      });
+    });
+  }
+}
+
+// Handle context menu clicks
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  const menuItemId = info.menuItemId;
+
+  // Get settings from storage
+  const settings = await chrome.storage.sync.get(['comfyuiUrl', 'workflows']);
+
+  if (!settings.comfyuiUrl) {
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon48.png',
+      title: 'ComfyUI Not Configured',
+      message: 'Please configure your ComfyUI server URL in the extension settings.'
+    });
+    return;
+  }
+
+  const workflows = settings.workflows || [];
+  let selectedWorkflow = null;
+
+  // Handle "no workflow" case
+  if (menuItemId === 'sendToComfyUI-noworkflow') {
+    selectedWorkflow = { name: 'Upload only', workflowData: null, imageNodeId: null };
+  } else if (menuItemId.startsWith('workflow-')) {
+    // Extract workflow index from menu item ID
+    const workflowIndex = parseInt(menuItemId.split('-')[1]);
+    selectedWorkflow = workflows[workflowIndex];
+  }
+
+  if (!selectedWorkflow) {
+    console.error('No workflow selected');
+    return;
+  }
+
+  const imageUrl = info.srcUrl;
+
+  try {
+    // Fetch the image
+    const response = await fetch(imageUrl);
+    const blob = await response.blob();
+
+    // Send to ComfyUI
+    await sendImageToComfyUI(blob, settings.comfyuiUrl, selectedWorkflow);
+
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon48.png',
+      title: 'Success',
+      message: `Image sent to ComfyUI: ${selectedWorkflow.name}`
+    });
+  } catch (error) {
+    console.error('Error sending image to ComfyUI:', error);
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon48.png',
+      title: 'Error',
+      message: `Failed to send image: ${error.message}`
+    });
+  }
+});
+
+async function sendImageToComfyUI(imageBlob, comfyuiUrl, workflow) {
+  const serverUrl = comfyuiUrl.replace(/\/$/, ''); // Remove trailing slash
 
   // Step 1: Upload the image
   const formData = new FormData();
   formData.append('image', imageBlob, 'image.png');
   formData.append('overwrite', 'true');
 
-  const uploadResponse = await fetch(`${comfyuiUrl}/upload/image`, {
+  const uploadResponse = await fetch(`${serverUrl}/upload/image`, {
     method: 'POST',
     body: formData
   });
@@ -78,27 +139,27 @@ async function sendImageToComfyUI(imageBlob, settings) {
   const uploadedFileName = uploadResult.name;
 
   // Step 2: Queue the workflow with the uploaded image
-  if (settings.workflowData) {
-    const workflow = JSON.parse(settings.workflowData);
+  if (workflow.workflowData) {
+    const workflowJson = JSON.parse(workflow.workflowData);
 
     // Find and update the LoadImage node
-    const imageNodeId = settings.imageNodeId || findLoadImageNode(workflow);
+    const imageNodeId = workflow.imageNodeId || findLoadImageNode(workflowJson);
 
-    if (imageNodeId && workflow[imageNodeId]) {
-      workflow[imageNodeId].inputs.image = uploadedFileName;
+    if (imageNodeId && workflowJson[imageNodeId]) {
+      workflowJson[imageNodeId].inputs.image = uploadedFileName;
 
       // Randomize all seed values in the workflow
-      randomizeSeeds(workflow);
+      randomizeSeeds(workflowJson);
 
       // Generate a random client_id
       const clientId = generateClientId();
 
       const promptPayload = {
-        prompt: workflow,
+        prompt: workflowJson,
         client_id: clientId
       };
 
-      const queueResponse = await fetch(`${comfyuiUrl}/prompt`, {
+      const queueResponse = await fetch(`${serverUrl}/prompt`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

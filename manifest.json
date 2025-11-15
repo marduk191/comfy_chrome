@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "ComfyUI Image Sender",
-  "version": "1.0.0",
-  "description": "Send images to ComfyUI workflows via right-click context menu",
+  "version": "1.1.0",
+  "description": "Send images to ComfyUI workflows via right-click context menu with multiple workflow support",
   "permissions": [
     "contextMenus",
     "storage",
