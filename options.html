@@ -6,7 +6,7 @@
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      max-width: 900px;
+      max-width: 1000px;
       margin: 0 auto;
       padding: 30px;
       background-color: #f5f5f5;
@@ -34,6 +34,12 @@
       border-bottom: 2px solid #4CAF50;
     }
 
+    h3 {
+      font-size: 16px;
+      color: #333;
+      margin: 15px 0 10px 0;
+    }
+
     .section {
       margin-bottom: 20px;
     }
@@ -59,7 +65,7 @@
     }
 
     textarea {
-      min-height: 150px;
+      min-height: 120px;
       resize: vertical;
     }
 
@@ -97,10 +103,6 @@
 
     button:hover {
       background-color: #45a049;
-    }
-
-    button:active {
-      background-color: #3d8b40;
     }
 
     button.secondary {
@@ -144,40 +146,67 @@
       border: 1px solid #f5c6cb;
     }
 
-    .workflow-info {
-      background-color: #e7f3ff;
-      padding: 15px;
-      border-radius: 4px;
-      margin-bottom: 15px;
-      border-left: 4px solid #2196F3;
-    }
-
-    .workflow-info h3 {
-      margin-top: 0;
-      margin-bottom: 10px;
-      color: #1976D2;
-      font-size: 16px;
-    }
-
-    .workflow-info ul {
-      margin: 10px 0;
-      padding-left: 20px;
-    }
-
-    .workflow-info li {
-      margin-bottom: 5px;
-      color: #555;
-      font-size: 13px;
-    }
-
-    .workflow-list {
+    .server-list {
       margin-top: 20px;
     }
 
-    .workflow-item {
+    .server-card {
       background-color: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      margin-bottom: 15px;
+      overflow: hidden;
+    }
+
+    .server-header {
       padding: 15px;
-      margin-bottom: 10px;
+      background-color: #e9ecef;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .server-header:hover {
+      background-color: #dee2e6;
+    }
+
+    .server-info {
+      flex: 1;
+    }
+
+    .server-name {
+      font-weight: 600;
+      font-size: 16px;
+      color: #333;
+      margin-bottom: 3px;
+    }
+
+    .server-url {
+      font-size: 13px;
+      color: #666;
+      font-family: 'Consolas', 'Monaco', monospace;
+    }
+
+    .server-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .server-content {
+      padding: 15px;
+      display: none;
+    }
+
+    .server-content.expanded {
+      display: block;
+    }
+
+    .workflow-item {
+      background-color: white;
+      padding: 12px;
+      margin-bottom: 8px;
       border-radius: 4px;
       border: 1px solid #dee2e6;
       display: flex;
@@ -185,44 +214,89 @@
       align-items: center;
     }
 
-    .workflow-item-info {
-      flex: 1;
+    .workflow-name {
+      font-weight: 500;
+      color: #333;
     }
 
-    .workflow-item-name {
+    .workflow-details {
+      font-size: 12px;
+      color: #666;
+      margin-top: 3px;
+    }
+
+    .workflow-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.5);
+    }
+
+    .modal.show {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-content {
+      background-color: white;
+      padding: 30px;
+      border-radius: 8px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      margin-bottom: 20px;
+    }
+
+    .modal-title {
+      font-size: 20px;
       font-weight: 600;
       color: #333;
-      font-size: 15px;
-      margin-bottom: 5px;
+      margin: 0;
     }
 
-    .workflow-item-details {
-      font-size: 13px;
-      color: #666;
-    }
-
-    .workflow-item-actions {
-      display: flex;
-      gap: 8px;
-    }
-
-    .workflow-form {
-      background-color: #f8f9fa;
+    .no-workflows {
+      color: #999;
+      font-style: italic;
+      text-align: center;
       padding: 20px;
+    }
+
+    .info-box {
+      background-color: #e7f3ff;
+      padding: 15px;
       border-radius: 4px;
-      margin-top: 15px;
-      border: 1px solid #dee2e6;
+      margin-bottom: 20px;
+      border-left: 4px solid #2196F3;
     }
 
-    .workflow-form.hidden {
-      display: none;
+    .info-box h3 {
+      margin-top: 0;
+      color: #1976D2;
+      font-size: 16px;
     }
 
-    code {
-      background-color: #f4f4f4;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-family: 'Consolas', 'Monaco', monospace;
+    .info-box ul {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+
+    .info-box li {
+      margin-bottom: 5px;
+      color: #555;
       font-size: 13px;
     }
   </style>
@@ -231,74 +305,76 @@
   <div class="container">
     <h1>ComfyUI Image Sender - Settings</h1>
 
-    <h2>Basic Settings</h2>
-
-    <div class="section">
-      <label for="comfyuiUrl">ComfyUI Server URL:</label>
-      <input type="url" id="comfyuiUrl" placeholder="http://127.0.0.1:8188">
-      <div class="help-text">
-        The URL where your ComfyUI server is running (e.g., http://127.0.0.1:8188)
-      </div>
-    </div>
-
-    <div class="button-group">
-      <button id="saveUrlBtn">Save URL</button>
-      <button id="testBtn" class="secondary">Test Connection</button>
-    </div>
-
-    <h2>Workflows</h2>
-
-    <div class="workflow-info">
-      <h3>How to set up workflows:</h3>
+    <div class="info-box">
+      <h3>Multi-Server Setup</h3>
       <ul>
-        <li>Add multiple workflows that you can choose from when sending images</li>
-        <li>Open ComfyUI and load or create the workflow you want to use</li>
-        <li>Click "Save (API Format)" to export your workflow as JSON</li>
-        <li>Copy the entire JSON content and paste it in the workflow form below</li>
-        <li>The extension will automatically find the LoadImage node and replace its input</li>
-        <li>Optionally, specify the exact node ID if you have multiple LoadImage nodes</li>
+        <li>Add multiple ComfyUI servers (local, remote, cloud)</li>
+        <li>Each server can have its own set of workflows</li>
+        <li>Right-click an image and select Server > Workflow from the menu</li>
       </ul>
     </div>
 
-    <button id="addWorkflowBtn">+ Add New Workflow</button>
+    <h2>ComfyUI Servers</h2>
 
-    <div id="workflowForm" class="workflow-form hidden">
-      <h3 id="formTitle">Add New Workflow</h3>
+    <button id="addServerBtn">+ Add New Server</button>
+
+    <div class="server-list" id="serverList">
+      <!-- Servers will be rendered here -->
+    </div>
+
+    <div id="status" class="status"></div>
+  </div>
+
+  <!-- Server Modal -->
+  <div id="serverModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title" id="serverModalTitle">Add Server</h2>
+      </div>
+      <div class="section">
+        <label for="serverName">Server Name:</label>
+        <input type="text" id="serverName" placeholder="e.g., Local ComfyUI, Cloud Server">
+        <div class="help-text">A friendly name to identify this server</div>
+      </div>
+      <div class="section">
+        <label for="serverUrl">Server URL:</label>
+        <input type="url" id="serverUrl" placeholder="http://127.0.0.1:8188">
+        <div class="help-text">The URL where this ComfyUI instance is running</div>
+      </div>
+      <div class="button-group">
+        <button id="saveServerBtn">Save Server</button>
+        <button id="testServerBtn" class="secondary">Test Connection</button>
+        <button id="cancelServerBtn" class="secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Workflow Modal -->
+  <div id="workflowModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title" id="workflowModalTitle">Add Workflow</h2>
+      </div>
       <div class="section">
         <label for="workflowName">Workflow Name:</label>
         <input type="text" id="workflowName" placeholder="e.g., Portrait Enhancement">
-        <div class="help-text">
-          Give this workflow a descriptive name (will appear in the context menu)
-        </div>
+        <div class="help-text">A descriptive name for this workflow</div>
       </div>
-
       <div class="section">
         <label for="workflowData">Workflow JSON (API Format):</label>
         <textarea id="workflowData" placeholder='Paste your ComfyUI workflow JSON here...'></textarea>
-        <div class="help-text">
-          Export your workflow in API format from ComfyUI
-        </div>
+        <div class="help-text">Export from ComfyUI using "Save (API Format)"</div>
       </div>
-
       <div class="section">
         <label for="imageNodeId">Image Node ID (Optional):</label>
         <input type="text" id="imageNodeId" placeholder="e.g., 3">
-        <div class="help-text">
-          If you have multiple LoadImage nodes, specify which one to use (leave empty for auto-detection)
-        </div>
+        <div class="help-text">Leave empty for auto-detection</div>
       </div>
-
       <div class="button-group">
         <button id="saveWorkflowBtn">Save Workflow</button>
         <button id="cancelWorkflowBtn" class="secondary">Cancel</button>
       </div>
     </div>
-
-    <div class="workflow-list" id="workflowList">
-      <!-- Workflows will be dynamically added here -->
-    </div>
-
-    <div id="status" class="status"></div>
   </div>
 
   <script src="options.js"></script>
