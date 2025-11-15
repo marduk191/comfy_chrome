@@ -6,7 +6,7 @@
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      max-width: 800px;
+      max-width: 900px;
       margin: 0 auto;
       padding: 30px;
       background-color: #f5f5f5;
@@ -59,7 +59,7 @@
     }
 
     textarea {
-      min-height: 200px;
+      min-height: 150px;
       resize: vertical;
     }
 
@@ -78,7 +78,7 @@
     }
 
     .button-group {
-      margin-top: 30px;
+      margin-top: 20px;
       display: flex;
       gap: 10px;
     }
@@ -109,6 +109,19 @@
 
     button.secondary:hover {
       background-color: #5a6268;
+    }
+
+    button.danger {
+      background-color: #dc3545;
+    }
+
+    button.danger:hover {
+      background-color: #c82333;
+    }
+
+    button.small {
+      padding: 6px 12px;
+      font-size: 13px;
     }
 
     .status {
@@ -157,6 +170,54 @@
       font-size: 13px;
     }
 
+    .workflow-list {
+      margin-top: 20px;
+    }
+
+    .workflow-item {
+      background-color: #f8f9fa;
+      padding: 15px;
+      margin-bottom: 10px;
+      border-radius: 4px;
+      border: 1px solid #dee2e6;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .workflow-item-info {
+      flex: 1;
+    }
+
+    .workflow-item-name {
+      font-weight: 600;
+      color: #333;
+      font-size: 15px;
+      margin-bottom: 5px;
+    }
+
+    .workflow-item-details {
+      font-size: 13px;
+      color: #666;
+    }
+
+    .workflow-item-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .workflow-form {
+      background-color: #f8f9fa;
+      padding: 20px;
+      border-radius: 4px;
+      margin-top: 15px;
+      border: 1px solid #dee2e6;
+    }
+
+    .workflow-form.hidden {
+      display: none;
+    }
+
     code {
       background-color: #f4f4f4;
       padding: 2px 6px;
@@ -180,38 +241,61 @@
       </div>
     </div>
 
-    <h2>Workflow Configuration</h2>
+    <div class="button-group">
+      <button id="saveUrlBtn">Save URL</button>
+      <button id="testBtn" class="secondary">Test Connection</button>
+    </div>
+
+    <h2>Workflows</h2>
 
     <div class="workflow-info">
-      <h3>How to set up your workflow:</h3>
+      <h3>How to set up workflows:</h3>
       <ul>
+        <li>Add multiple workflows that you can choose from when sending images</li>
         <li>Open ComfyUI and load or create the workflow you want to use</li>
         <li>Click "Save (API Format)" to export your workflow as JSON</li>
-        <li>Copy the entire JSON content and paste it in the field below</li>
+        <li>Copy the entire JSON content and paste it in the workflow form below</li>
         <li>The extension will automatically find the LoadImage node and replace its input</li>
         <li>Optionally, specify the exact node ID if you have multiple LoadImage nodes</li>
       </ul>
     </div>
 
-    <div class="section">
-      <label for="workflowData">Workflow JSON (API Format):</label>
-      <textarea id="workflowData" placeholder='Paste your ComfyUI workflow JSON here...'></textarea>
-      <div class="help-text">
-        Export your workflow in API format from ComfyUI. The extension will find the LoadImage node automatically.
+    <button id="addWorkflowBtn">+ Add New Workflow</button>
+
+    <div id="workflowForm" class="workflow-form hidden">
+      <h3 id="formTitle">Add New Workflow</h3>
+      <div class="section">
+        <label for="workflowName">Workflow Name:</label>
+        <input type="text" id="workflowName" placeholder="e.g., Portrait Enhancement">
+        <div class="help-text">
+          Give this workflow a descriptive name (will appear in the context menu)
+        </div>
+      </div>
+
+      <div class="section">
+        <label for="workflowData">Workflow JSON (API Format):</label>
+        <textarea id="workflowData" placeholder='Paste your ComfyUI workflow JSON here...'></textarea>
+        <div class="help-text">
+          Export your workflow in API format from ComfyUI
+        </div>
+      </div>
+
+      <div class="section">
+        <label for="imageNodeId">Image Node ID (Optional):</label>
+        <input type="text" id="imageNodeId" placeholder="e.g., 3">
+        <div class="help-text">
+          If you have multiple LoadImage nodes, specify which one to use (leave empty for auto-detection)
+        </div>
+      </div>
+
+      <div class="button-group">
+        <button id="saveWorkflowBtn">Save Workflow</button>
+        <button id="cancelWorkflowBtn" class="secondary">Cancel</button>
       </div>
     </div>
 
-    <div class="section">
-      <label for="imageNodeId">Image Node ID (Optional):</label>
-      <input type="text" id="imageNodeId" placeholder="e.g., 3">
-      <div class="help-text">
-        If you have multiple LoadImage nodes, specify which one to use (leave empty for auto-detection)
-      </div>
-    </div>
-
-    <div class="button-group">
-      <button id="saveBtn">Save Settings</button>
-      <button id="testBtn" class="secondary">Test Connection</button>
+    <div class="workflow-list" id="workflowList">
+      <!-- Workflows will be dynamically added here -->
     </div>
 
     <div id="status" class="status"></div>

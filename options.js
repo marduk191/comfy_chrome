@@ -1,43 +1,28 @@
 // Options page script for ComfyUI Image Sender
 
+let editingIndex = -1; // Track which workflow is being edited (-1 = new workflow)
+
 document.addEventListener('DOMContentLoaded', async () => {
   // Load saved settings
-  const settings = await chrome.storage.sync.get([
-    'comfyuiUrl',
-    'workflowData',
-    'imageNodeId'
-  ]);
+  const settings = await chrome.storage.sync.get(['comfyuiUrl', 'workflows']);
 
   if (settings.comfyuiUrl) {
     document.getElementById('comfyuiUrl').value = settings.comfyuiUrl;
   }
 
-  if (settings.workflowData) {
-    // Pretty print the JSON
-    try {
-      const formatted = JSON.stringify(JSON.parse(settings.workflowData), null, 2);
-      document.getElementById('workflowData').value = formatted;
-    } catch (e) {
-      document.getElementById('workflowData').value = settings.workflowData;
-    }
-  }
+  // Load and display workflows
+  renderWorkflows(settings.workflows || []);
 
-  if (settings.imageNodeId) {
-    document.getElementById('imageNodeId').value = settings.imageNodeId;
-  }
-
-  // Save button handler
-  document.getElementById('saveBtn').addEventListener('click', async () => {
+  // Save URL button handler
+  document.getElementById('saveUrlBtn').addEventListener('click', async () => {
     const comfyuiUrl = document.getElementById('comfyuiUrl').value.trim();
-    const workflowData = document.getElementById('workflowData').value.trim();
-    const imageNodeId = document.getElementById('imageNodeId').value.trim();
 
-    // Validate URL
     if (!comfyuiUrl) {
       showStatus('Please enter a ComfyUI server URL', 'error');
       return;
     }
 
+    // Validate URL format
     try {
       new URL(comfyuiUrl);
     } catch (e) {
@@ -45,24 +30,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    // Validate workflow JSON if provided
-    if (workflowData) {
-      try {
-        JSON.parse(workflowData);
-      } catch (e) {
-        showStatus('Invalid workflow JSON: ' + e.message, 'error');
-        return;
-      }
-    }
-
     // Save to storage
-    await chrome.storage.sync.set({
-      comfyuiUrl,
-      workflowData,
-      imageNodeId
-    });
-
-    showStatus('Settings saved successfully!', 'success');
+    await chrome.storage.sync.set({ comfyuiUrl });
+    showStatus('Server URL saved successfully!', 'success');
   });
 
   // Test connection button handler
@@ -108,7 +78,166 @@ document.addEventListener('DOMContentLoaded', async () => {
       );
     }
   });
+
+  // Add workflow button handler
+  document.getElementById('addWorkflowBtn').addEventListener('click', () => {
+    editingIndex = -1;
+    document.getElementById('formTitle').textContent = 'Add New Workflow';
+    document.getElementById('workflowName').value = '';
+    document.getElementById('workflowData').value = '';
+    document.getElementById('imageNodeId').value = '';
+    document.getElementById('workflowForm').classList.remove('hidden');
+    document.getElementById('workflowName').focus();
+  });
+
+  // Cancel workflow button handler
+  document.getElementById('cancelWorkflowBtn').addEventListener('click', () => {
+    document.getElementById('workflowForm').classList.add('hidden');
+    editingIndex = -1;
+  });
+
+  // Save workflow button handler
+  document.getElementById('saveWorkflowBtn').addEventListener('click', async () => {
+    const name = document.getElementById('workflowName').value.trim();
+    const workflowData = document.getElementById('workflowData').value.trim();
+    const imageNodeId = document.getElementById('imageNodeId').value.trim();
+
+    if (!name) {
+      showStatus('Please enter a workflow name', 'error');
+      return;
+    }
+
+    if (!workflowData) {
+      showStatus('Please enter workflow JSON data', 'error');
+      return;
+    }
+
+    // Validate workflow JSON
+    try {
+      JSON.parse(workflowData);
+    } catch (e) {
+      showStatus('Invalid workflow JSON: ' + e.message, 'error');
+      return;
+    }
+
+    // Get current workflows
+    const settings = await chrome.storage.sync.get(['workflows']);
+    const workflows = settings.workflows || [];
+
+    const workflow = {
+      name: name,
+      workflowData: workflowData,
+      imageNodeId: imageNodeId || null
+    };
+
+    if (editingIndex === -1) {
+      // Adding new workflow
+      workflows.push(workflow);
+    } else {
+      // Editing existing workflow
+      workflows[editingIndex] = workflow;
+    }
+
+    // Save to storage
+    await chrome.storage.sync.set({ workflows });
+
+    // Hide form and reset
+    document.getElementById('workflowForm').classList.add('hidden');
+    editingIndex = -1;
+
+    // Re-render workflows
+    renderWorkflows(workflows);
+
+    showStatus('Workflow saved successfully!', 'success');
+  });
 });
+
+function renderWorkflows(workflows) {
+  const workflowList = document.getElementById('workflowList');
+  workflowList.innerHTML = '';
+
+  if (workflows.length === 0) {
+    workflowList.innerHTML = '<p style="color: #666; font-style: italic;">No workflows configured. Click "Add New Workflow" to get started.</p>';
+    return;
+  }
+
+  workflows.forEach((workflow, index) => {
+    const workflowItem = document.createElement('div');
+    workflowItem.className = 'workflow-item';
+
+    const workflowInfo = document.createElement('div');
+    workflowInfo.className = 'workflow-item-info';
+
+    const workflowName = document.createElement('div');
+    workflowName.className = 'workflow-item-name';
+    workflowName.textContent = workflow.name;
+
+    const workflowDetails = document.createElement('div');
+    workflowDetails.className = 'workflow-item-details';
+    const nodeInfo = workflow.imageNodeId ? `Node ID: ${workflow.imageNodeId}` : 'Auto-detect LoadImage node';
+    workflowDetails.textContent = nodeInfo;
+
+    workflowInfo.appendChild(workflowName);
+    workflowInfo.appendChild(workflowDetails);
+
+    const workflowActions = document.createElement('div');
+    workflowActions.className = 'workflow-item-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.textContent = 'Edit';
+    editBtn.className = 'secondary small';
+    editBtn.addEventListener('click', () => editWorkflow(index, workflows));
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.className = 'danger small';
+    deleteBtn.addEventListener('click', () => deleteWorkflow(index));
+
+    workflowActions.appendChild(editBtn);
+    workflowActions.appendChild(deleteBtn);
+
+    workflowItem.appendChild(workflowInfo);
+    workflowItem.appendChild(workflowActions);
+
+    workflowList.appendChild(workflowItem);
+  });
+}
+
+function editWorkflow(index, workflows) {
+  editingIndex = index;
+  const workflow = workflows[index];
+
+  document.getElementById('formTitle').textContent = 'Edit Workflow';
+  document.getElementById('workflowName').value = workflow.name;
+  document.getElementById('imageNodeId').value = workflow.imageNodeId || '';
+
+  // Pretty print the JSON
+  try {
+    const formatted = JSON.stringify(JSON.parse(workflow.workflowData), null, 2);
+    document.getElementById('workflowData').value = formatted;
+  } catch (e) {
+    document.getElementById('workflowData').value = workflow.workflowData;
+  }
+
+  document.getElementById('workflowForm').classList.remove('hidden');
+  document.getElementById('workflowName').focus();
+}
+
+async function deleteWorkflow(index) {
+  if (!confirm('Are you sure you want to delete this workflow?')) {
+    return;
+  }
+
+  const settings = await chrome.storage.sync.get(['workflows']);
+  const workflows = settings.workflows || [];
+
+  workflows.splice(index, 1);
+
+  await chrome.storage.sync.set({ workflows });
+
+  renderWorkflows(workflows);
+  showStatus('Workflow deleted successfully!', 'success');
+}
 
 function showStatus(message, type) {
   const statusDiv = document.getElementById('status');
