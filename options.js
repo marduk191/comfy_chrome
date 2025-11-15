@@ -6,6 +6,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load saved settings
   const settings = await chrome.storage.sync.get(['comfyuiUrl', 'workflows']);
 
+  console.log('Loaded settings:', settings);
+  console.log('Workflows count:', settings.workflows ? settings.workflows.length : 0);
+
+  // Check storage quota
+  if (chrome.storage.sync.getBytesInUse) {
+    const bytesInUse = await chrome.storage.sync.getBytesInUse(['workflows']);
+    console.log('Storage bytes in use for workflows:', bytesInUse, '/ 102400 (100KB quota)');
+  }
+
   if (settings.comfyuiUrl) {
     document.getElementById('comfyuiUrl').value = settings.comfyuiUrl;
   }
@@ -138,17 +147,37 @@ document.addEventListener('DOMContentLoaded', async () => {
       workflows[editingIndex] = workflow;
     }
 
+    // Check approximate size
+    const workflowsStr = JSON.stringify(workflows);
+    const approxBytes = new Blob([workflowsStr]).size;
+    console.log('Approximate workflow data size:', approxBytes, 'bytes');
+
+    if (approxBytes > 102400) {
+      showStatus('Warning: Workflow data is very large (>100KB). Consider using chrome.storage.local instead.', 'error');
+      return;
+    }
+
     // Save to storage
-    await chrome.storage.sync.set({ workflows });
+    try {
+      await chrome.storage.sync.set({ workflows });
+      console.log('Workflows saved to storage:', workflows.length, 'workflows');
 
-    // Hide form and reset
-    document.getElementById('workflowForm').classList.add('hidden');
-    editingIndex = -1;
+      // Verify save by reading back
+      const verify = await chrome.storage.sync.get(['workflows']);
+      console.log('Verified workflows from storage:', verify.workflows);
 
-    // Re-render workflows
-    renderWorkflows(workflows);
+      // Hide form and reset
+      document.getElementById('workflowForm').classList.add('hidden');
+      editingIndex = -1;
 
-    showStatus('Workflow saved successfully!', 'success');
+      // Re-render workflows
+      renderWorkflows(workflows);
+
+      showStatus('Workflow saved successfully!', 'success');
+    } catch (error) {
+      console.error('Error saving workflow:', error);
+      showStatus('Failed to save workflow: ' + error.message, 'error');
+    }
   });
 });
 
@@ -186,7 +215,7 @@ function renderWorkflows(workflows) {
     const editBtn = document.createElement('button');
     editBtn.textContent = 'Edit';
     editBtn.className = 'secondary small';
-    editBtn.addEventListener('click', () => editWorkflow(index, workflows));
+    editBtn.addEventListener('click', () => editWorkflow(index));
 
     const deleteBtn = document.createElement('button');
     deleteBtn.textContent = 'Delete';
@@ -203,9 +232,18 @@ function renderWorkflows(workflows) {
   });
 }
 
-function editWorkflow(index, workflows) {
+async function editWorkflow(index) {
   editingIndex = index;
+
+  // Fetch fresh data from storage
+  const settings = await chrome.storage.sync.get(['workflows']);
+  const workflows = settings.workflows || [];
   const workflow = workflows[index];
+
+  if (!workflow) {
+    showStatus('Workflow not found', 'error');
+    return;
+  }
 
   document.getElementById('formTitle').textContent = 'Edit Workflow';
   document.getElementById('workflowName').value = workflow.name;
